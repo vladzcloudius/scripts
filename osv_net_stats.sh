@@ -12,7 +12,7 @@ GUEST_IP=$1
 NIC=$2
 
 COUNTERS=( `curl -s http://192.168.122.89:8000/network/ifconfig/eth0 | tr ',' '\n' | egrep "worker|bh|full|packet|kick" | cut -d":" -f2- | cut -d" " -f2- | tr '\n' ' '` )
-queue_is_full=${COUNTERS[0]}
+oqueue_is_full=${COUNTERS[0]}
 okicks=${COUNTERS[1]}
 opackets=${COUNTERS[2]}
 ibh_wakeups=${COUNTERS[3]}
@@ -50,3 +50,6 @@ print_div $oworker_packets $oworker_kicks
 #####################
 echo -n "Tx: worker packets($oworker_packets)/worker wakeups($oworker_wakeups) = "
 print_div $oworker_packets $oworker_wakeups
+#####################
+echo -n "Tx: queue is full($oqueue_is_full)/packets($opackets) = "
+print_div $oqueue_is_full $opackets
