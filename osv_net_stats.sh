@@ -11,7 +11,7 @@ fi
 GUEST_IP=$1
 NIC=$2
 
-COUNTERS=( `curl -s http://192.168.122.89:8000/network/ifconfig/eth0 | tr ',' '\n' | egrep "worker|bh|full|packet|kick" | cut -d":" -f2- | cut -d" " -f2- | tr '\n' ' '` )
+COUNTERS=( `curl -s http://${GUEST_IP}:8000/network/ifconfig/$NIC | tr ',' '\n' | egrep "worker|bh|full|packet|kick" | cut -d":" -f2- | cut -d" " -f2- | tr '\n' ' '` )
 oqueue_is_full=${COUNTERS[0]}
 okicks=${COUNTERS[1]}
 opackets=${COUNTERS[2]}
