@@ -23,20 +23,25 @@ print_div()
 }
 
 #
-# print_ratio <"a" name> <"a" var name> <"b" name> <"b" var name>
+# print_ratio <Prefix> <"a" name> <"a" var name> <"b" name> <"b" var name>
 #
 print_ratio()
 {
+    local prefix=$1
+    shift
     local a_name=$1
     local a_var_name=$2
     local b_name=$3
     local b_var_name=$4
 
-    printf "%-40s / %-40s = " "$a_name($((a_var_name))(+$((a_var_name-${a_var_name}1))))" "$b_name($((b_var_name))(+$((b_var_name-${b_var_name}1))))"
-    print_div $((a_var_name)) $((b_var_name)) 15
+    printf "%s%-40s :%d(+%d)\n" "$prefix" "$a_name" $((a_var_name)) $((a_var_name-${a_var_name}1))
+    printf "%s%-40s :%d(+%d)\n" "$prefix" "$b_name" $((b_var_name)) $((b_var_name-${b_var_name}1))
+    echo "---------------------------------------------------------------------"
+    printf "%s%-40s :" "$prefix" "Ratio"
+    print_div $((a_var_name)) $((b_var_name)) 0
     echo -n "("
     print_div $((a_var_name-${a_var_name}1)) $((b_var_name-${b_var_name}1)) 0
-    echo ")"
+    echo -e ")\n"
 }
 ################################################################################
 if [[ $# -ne 2 ]]; then
@@ -81,20 +86,15 @@ do
     clear
 
     #####################
-    echo -n "Rx: "
-    print_ratio packets ipackets bh_wakeups ibh_wakeups
+    print_ratio "Rx: " packets ipackets bh_wakeups ibh_wakeups
     #####################
-    echo -n "Tx: "
-    print_ratio packets opackets kicks okicks
+    print_ratio "Tx: " packets opackets kicks okicks
     #####################
-    echo -n "Tx: "
-    print_ratio "worker packets" oworker_packets "worker kicks" oworker_kicks
+    print_ratio "Tx: " "worker packets" oworker_packets "worker kicks" oworker_kicks
     #####################
-    echo -n "Tx: "
-    print_ratio "worker packets" oworker_packets "worker wakeups" oworker_wakeups
+    print_ratio "Tx: " "worker packets" oworker_packets "worker wakeups" oworker_wakeups
     #####################
-    echo -n "Tx: "
-    print_ratio "queue is full" oqueue_is_full "packets" opackets
+    print_ratio "Tx: " "queue is full" oqueue_is_full "packets" opackets
 
     sleep 1
 done
