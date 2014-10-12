@@ -19,14 +19,19 @@ fi
 
 echo "cpus4qemu=$cpus4qemu"
 
+cpu_qemu_threads=0
 # Set qemu threads affinity
 for t in $(echo query-cpus | sudo  qmp-shell -p /tmp/qmp-sock | grep thread_id | cut -d':' -f 2 | cut -d'}' -f 1)
 do
     sudo taskset -pc $cur_cpu $t
     cur_cpu=$(((cur_cpu + 1) % cpus4qemu))
+    cpu_qemu_threads=$((cpu_qemu_threads+1))
 done
 
 cur_cpu=$((cpus4qemu % total_cpus))
+if [[ $cur_cpu -gt $cpu_qemu_threads ]]; then
+    cur_cpu=$cpu_qemu_threads
+fi
 
 echo "Setting the vhost affinity to CPU $cur_cpu"
 sudo taskset -pc $cur_cpu `pgrep vhost`
