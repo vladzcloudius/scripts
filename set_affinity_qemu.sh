@@ -20,7 +20,7 @@ fi
 echo "cpus4qemu=$cpus4qemu"
 
 # Set qemu threads affinity
-for t in $(taskset -ap `pgrep qemu-system` | cut -d" " -f2 | cut -d"'" -f1)
+for t in $(echo query-cpus | sudo  qmp-shell -p /tmp/qmp-sock | grep thread_id | cut -d':' -f 2 | cut -d'}' -f 1)
 do
     sudo taskset -pc $cur_cpu $t
     cur_cpu=$(((cur_cpu + 1) % cpus4qemu))
