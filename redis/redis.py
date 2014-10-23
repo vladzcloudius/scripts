@@ -6,6 +6,7 @@ import argparse
 import subprocess
 import string
 import numpy
+import os
 
 argp = argparse.ArgumentParser(description =
                                'Perform redis tests set: PING, SET, GET, INCR, \
@@ -34,10 +35,13 @@ def adjust_runtime_factor (cmd, adjust_to_sec):
     rc = exe.wait()
     elapsed = (time.time() - start)
 
+    if rc != 0:
+        raise Exception('cmd failed', outs)
+
 
     print("factor " + str(adjust_to_sec / elapsed))
 
-    return adjust_to_sec / elapsed
+    return adjust_to_sec / elapsed, outs
 
 ################################################################################
 #if len(sys.argv) != 4:
@@ -64,16 +68,18 @@ test_tags = []
 
 for test in tests:
     test_cmd_line = cmd_line_base + ['-t', test, '-n']
-    factor = adjust_runtime_factor(test_cmd_line + [str(adgust_it_num)],
+    factor, outs = adjust_runtime_factor(test_cmd_line + [str(adgust_it_num)],
                                    args.step_time)
-    test_cmd_line += [str(adgust_it_num * factor)]
+    #test_cmd_line += [str(adgust_it_num * factor)]
+    it_num = adgust_it_num
     for run in range(args.it_num):
+        # Drop the DB
+        os.system("redis-cli -h " + args.server_ip + " flushall > /dev/null");
+
         # Execute a test
-        exe = subprocess.Popen(test_cmd_line, stdout = subprocess.PIPE, stderr = subprocess.PIPE,)
-        outs, errs = exe.communicate()
-        rc = exe.wait()
-        if rc != 0:
-            raise Exception('cmd failed', outs)
+        it_num *= factor
+        factor, outs = adjust_runtime_factor(test_cmd_line + [str(it_num)],
+                                            args.step_time)
 
         # Check the output lines
         for line in outs.splitlines():
