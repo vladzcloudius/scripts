@@ -95,7 +95,7 @@ for test in tests:
 
                 results[header] += [float(string.split(string.split(line,',')[1], '"')[1])]
 
-print("Test,AVG,COVAR")
+print("Test,AVG,CV")
 for test in test_tags:
     avg = numpy.average(results[test])
     stdev = numpy.std(results[test])
