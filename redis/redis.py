@@ -39,7 +39,7 @@ def adjust_runtime_factor (cmd, adjust_to_sec):
         raise Exception('cmd failed', outs)
 
 
-    print("factor " + str(adjust_to_sec / elapsed))
+    #print("factor " + str(adjust_to_sec / elapsed))
 
     return adjust_to_sec / elapsed, outs
 
@@ -99,5 +99,5 @@ print("Test,AVG,COVAR")
 for test in test_tags:
     avg = numpy.average(results[test])
     stdev = numpy.std(results[test])
-    print(test + ',' + str(avg) + ',' + str(stdev / avg))
+    print(test + ',' + str(avg) + ',' + str(100 * stdev / avg))
 
