@@ -1,0 +1,26 @@
+screen -t bash0
+screen -t bash1
+screen -t bash2
+screen -t bash3
+screen -t bash4
+screen -t bash5
+screen -t bash6
+screen -t bash7
+altscreen on
+term screen-256color
+
+# Bind F11 and F12 (NOT F1 and F2) to previous and next screen window
+bindkey -k k9 prev
+bindkey -k F2 next
+
+#bindkey -k ^[[d prev
+#bindkey -k ^[[c next
+
+#caption always "%h"
+#change the hardstatus settings to give an window list at the bottom of the                                                                        
+#screen, with the time and date and with the current window highlighted                                                                            
+hardstatus alwayslastline "[screen %n%?] %h"
+#hardstatus string '%Lw%{= kW}%50> %n%f* %t%+Lw%< %-=%c:%s%{-}'
+#hardstatus string '%{= kG}%-Lw%{= kW}%50> %n%f* %t%{= kG}%+Lw%< %{= kG}%-=%c:%s%{-}'
+#hardstatus string '%{= kG}[ %{G}%H %{g}][%= %{= kw}%?%-Lw%?%{r}(%{W}%n*%f%t%?(%u)%?%{r})%{w}%?%+Lw%?%?%= %{g}][%{B} %m-%d %{W}%c %{g}]'
+#hardstatus alwayslastline "%{= kR} %-Lw%{=b Kk} %n%f %t %{-}%+Lw %=%{= dd}"
