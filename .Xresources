@@ -1,0 +1,27 @@
+!Xft.dpi:        96
+!Xft.antialias:  true
+!Xft.rgba:       rgb
+!Xft.hinting:    true
+!Xft.hintstyle:  hintslight
+!Xft.hintstyle:  hintsfull
+
+! xterm settings ---------------------------------------------------------------
+!XTerm*faceName: Source Code Pro for Powerline,Source Code Pro Medium:style=Medium,Regular
+!XTerm*faceName: Meslo LG M for Powerline:style=RegularForPowerline
+XTerm*faceName: DejaVu Sans Mono for Powerline:style=Book
+!XTerm*faceName: Inconsolata\-dz for Powerline:style=dzForPowerline
+!XTerm*fontMenu*fontdefault*Label: Default
+!XTerm*loginshell: 1
+!XTerm*locale: 1
+!XTerm.utf8: 1
+!XTerm*utf8Title: 1
+
+!XTerm*bellIsUrgent: 1
+!XTerm*borderWidth: 0
+!XTerm*scrollBar: 0
+
+!XTerm*xftAntialias: 1
+!XTerm*cjkWidth: 0
+
+XTerm*background: black
+XTerm*foreground: white
