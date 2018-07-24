@@ -88,17 +88,17 @@ A_UNI_COMMON_SCYLLA_PARAMS="-p maxexecutiontime=5400 -threads $A_UNI_THREADS -p 
 
 workloadA_uniform_scylla()
 {
-    workload "cassandra-cql" "$SCYLLA_HOST" "$A_UNI_REC_COUNT" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "workloads/workloada" "wA-uni-scylla-out" $A_UNI_COMMON_SCYLLA_PARAMS
+    workload "cassandra-cql" "$SCYLLA_HOST" "$A_UNI_REC_COUNT" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "workloads/workloada" "wA-uni-scylla" $A_UNI_COMMON_SCYLLA_PARAMS
 }
 
 workloadA_zipifian_scylla()
 {
-    workload "cassandra-cql" "$SCYLLA_HOST" "$A_UNI_REC_COUNT" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "workloads/workloada" "wA-zipifian-scylla-out" $A_UNI_COMMON_SCYLLA_PARAMS -p hotspotdatafraction=0.2 -p hotspotopnfraction=0.8 -p requestdistribution=zipfian
+    workload "cassandra-cql" "$SCYLLA_HOST" "$A_UNI_REC_COUNT" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "workloads/workloada" "wA-zipifian-scylla" $A_UNI_COMMON_SCYLLA_PARAMS -p hotspotdatafraction=0.2 -p hotspotopnfraction=0.8 -p requestdistribution=zipfian
 }
 
 workloadA_single_partition_scylla()
 {
-    workload "cassandra-cql" "$SCYLLA_HOST" 100000 "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" 1 "workloads/workloada" "wA-uni-scylla-out" $A_UNI_COMMON_SCYLLA_PARAMS
+    workload "cassandra-cql" "$SCYLLA_HOST" 100000 "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" 1 "workloads/workloada" "wA-uni-single-part-scylla" $A_UNI_COMMON_SCYLLA_PARAMS
 }
 
 
