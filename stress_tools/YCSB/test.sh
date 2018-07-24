@@ -40,7 +40,7 @@ load_data_scylla()
 }
 
 #
-#  workload <db type> <host> <total records> <workload> <output prefix> <extra params>
+#  workload <db type> <host> <total records> <op count> <insert count> <workload> <output prefix> <extra params>
 #
 workload()
 {
@@ -49,6 +49,10 @@ workload()
     local host="$1"
     shift
     local total_records="$1"
+    shift
+    local op_count="$1"
+    shift
+    local insert_count="$1"
     shift
     local workload="$1"
     shift
@@ -66,7 +70,7 @@ workload()
     for ((i=0; i < NUM_INSTANCES; i++))
     do
 		start=$(( i * one_client_op_count ))
-		inst_cmd="$cmd -p recordcount=$total_records -p insertstart=$start -p insertcount=$one_client_op_count -p operationcount=$one_client_op_count"
+		inst_cmd="$cmd -p recordcount=$total_records -p insertstart=$start -p insertcount=$insert_count -p operationcount=$op_count"
 		log_file_name="$OUTPUT_BASE/$fname_prefix-out-$i.txt"
 
 		echo "Starting test instance $i..."
@@ -84,10 +88,39 @@ A_UNI_COMMON_SCYLLA_PARAMS="-p maxexecutiontime=5400 -threads $A_UNI_THREADS -p 
 
 workloadA_uniform_scylla()
 {
-    workload "cassandra-cql" "$SCYLLA_HOST" "$A_UNI_REC_COUNT" "workloads/workloada" "wA-uni-scylla-out" $A_UNI_COMMON_SCYLLA_PARAMS
+    workload "cassandra-cql" "$SCYLLA_HOST" "$A_UNI_REC_COUNT" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "workloads/workloada" "wA-uni-scylla-out" $A_UNI_COMMON_SCYLLA_PARAMS
+}
+
+workloadA_zipifian_scylla()
+{
+    workload "cassandra-cql" "$SCYLLA_HOST" "$A_UNI_REC_COUNT" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "workloads/zipfian_workloada" "wA-zipifian-scylla-out" $A_UNI_COMMON_SCYLLA_PARAMS -p hotspotdatafraction=0.2 -p hotspotopnfraction=0.8
+}
+
+workloadA_single_partition_scylla()
+{
+    workload "cassandra-cql" "$SCYLLA_HOST" 100000 "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" 1 "workloads/workloada" "wA-uni-scylla-out" $A_UNI_COMMON_SCYLLA_PARAMS
 }
 
 
 ########################################################################################################################
+test_mode="$1"
+
 trap 'intr_handler' INT TERM
-workloadA_uniform_scylla
+
+case "$test_mode" in
+"l_s")
+	load_data_scylla
+	;;
+"u_s")
+	workloadA_uniform_scylla
+	;;
+"z_s")
+	workloadA_zipifian_scylla
+	;;
+"sp_s")
+	workloadA_single_partition_scylla
+	;;
+*)
+	echo "Bad test mode: $test_mode"
+	;;
+esac
