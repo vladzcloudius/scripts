@@ -1,13 +1,19 @@
 #!/bin/bash
 
 OUTPUT_BASE=$PWD
-NUM_INSTANCES=16
-SCYLLA_HOST="172.16.0.80"
+NUM_INSTANCES=8
+SCYLLA_HOST="172.16.0.30"
+SCYLLA_USER="centos"
 
 LOAD_RECORD_COUNT=160000000 
-ONE_CLIENT_LOAD_RECORDS=$(( LOAD_RECORD_COUNT / NUM_INSTANCES ))
-LOAD_THREADS_COUNT=400
-YCSB_LOAD_COMMON_PARAMS="-p recordcount=$LOAD_RECORD_COUNT -s -P workloads/workloada -threads $LOAD_THREADS_COUNT"
+TARGET_RATE=120000
+
+A_UNI_REC_COUNT=$LOAD_RECORD_COUNT
+PER_HOST_CONNETIONS=16
+A_UNI_THREADS=35 #??? Limit the rate instead
+SCYLLA_COMMON_PARAMS="-p maxexecutiontime=5400 -threads $A_UNI_THREADS -p cassandra.writeconsistencylevel=QUORUM -p cassandra.coreconnections=$(( PER_HOST_CONNETIONS / 2 )) -p cassandra.maxconnections=$PER_HOST_CONNETIONS"
+A_UNI_COMMON_SCYLLA_PARAMS="$SCYLLA_COMMON_PARAMS -target $(( TARGET_RATE / NUM_INSTANCES ))"
+LOAD_COMMON_SCYLLA_PARAMS="$SCYLLA_COMMON_PARAMS -target $(( TARGET_RATE / (NUM_INSTANCES * 2) ))"
 
 intr_handler()
 {
@@ -17,33 +23,13 @@ intr_handler()
     exit 1
 }
 
-load_data_scylla()
-{
-	local start
-	local cmd="./bin/ycsb load cassandra-cql -p hosts=$SCYLLA_HOST -p cassandra.writeconsistencylevel=QUORUM $YCSB_LOAD_COMMON_PARAMS"
-	local log_file_name
-	local inst_cmd
-
-	cd ~/YCSB
-	for ((i=0; i < NUM_INSTANCES; i++))
-	do 
-		start=$(( i * ONE_CLIENT_LOAD_RECORDS ))
-		inst_cmd="$cmd -p insertstart=$start -p insertcount=$ONE_CLIENT_LOAD_RECORDS"
-		log_file_name="$OUTPUT_BASE/load-out-$i.txt"
-		
-		echo "Starting loader $i..."
-		echo "$inst_cmd" > $log_file_name 2>&1
-		$inst_cmd >> $log_file_name 2>&1 &
-	done
-	wait
-	cd -
-}
-
 #
-#  workload <db type> <host> <total records> <op count> <insert count> <workload> <output prefix> <extra params>
+#  workload <workload phase, e.g. "run" or "load"> <db type> <host> <total records> <op count> <insert count> <workload> <output prefix> <extra params>
 #
 workload()
 {
+    local workload_phase="$1"
+    shift
     local db_type="$1"
     shift
     local host="$1"
@@ -60,9 +46,13 @@ workload()
     shift
     local extra_ld_params="$@"
 
+    local host_param=""
+
+    [[ -n "$host" ]] && host_param="-p hosts=$host"
+
     local one_client_op_count=$(( total_records / NUM_INSTANCES ))
-	local start
-    local cmd="./bin/ycsb run $db_type -p hosts=$host $extra_ld_params -P $workload -s"
+    local start
+    local cmd="./bin/ycsb $workload_phase $db_type $host_param $extra_ld_params -P $workload -s"
     local log_file_name
     local inst_cmd
 
@@ -81,24 +71,37 @@ workload()
     cd -
 }
 
-#A_UNI_REC_COUNT=1000000000
-A_UNI_REC_COUNT=$LOAD_RECORD_COUNT
-A_UNI_THREADS=35 #??? Limit the rate instead
-A_UNI_COMMON_SCYLLA_PARAMS="-p maxexecutiontime=5400 -threads $A_UNI_THREADS -p cassandra.writeconsistencylevel=QUORUM"
+load_data_scylla()
+{
+	# Create the KS.CF first
+	echo "Creating a KS..."
+	if ! ssh $SCYLLA_USER@$SCYLLA_HOST "cqlsh -e \"CREATE KEYSPACE IF NOT EXISTS ycsb WITH REPLICATION = {'class' : 'SimpleStrategy', 'replication_factor' : 3} ;\""; then
+	    echo "Failed to create a KS"
+	    exit 1
+	fi
+
+	echo "Creating a CF..."
+	if ! ssh $SCYLLA_USER@$SCYLLA_HOST "cqlsh -e \"create table if not exists ycsb.usertable ( y_id varchar, field0 varchar, field1 varchar, field2 varchar, field3 varchar, field4 varchar, field5 varchar, field6 varchar, field7 varchar, field8 varchar, field9 varchar, PRIMARY KEY(y_id));\""; then
+	    echo "Failed to create a CF"
+	    exit 1
+	fi
+
+    workload "load" "cassandra-cql" "$SCYLLA_HOST" "$LOAD_RECORD_COUNT" "$(( LOAD_RECORD_COUNT / NUM_INSTANCES ))" "$(( LOAD_RECORD_COUNT / NUM_INSTANCES ))" "workloads/workloada" "load-scylla" $LOAD_COMMON_SCYLLA_PARAMS
+}
 
 workloadA_uniform_scylla()
 {
-    workload "cassandra-cql" "$SCYLLA_HOST" "$A_UNI_REC_COUNT" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "workloads/workloada" "wA-uni-scylla" $A_UNI_COMMON_SCYLLA_PARAMS
+    workload "run" "cassandra-cql" "$SCYLLA_HOST" "$A_UNI_REC_COUNT" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "workloads/workloada" "wA-uni-scylla" $A_UNI_COMMON_SCYLLA_PARAMS
 }
 
 workloadA_zipifian_scylla()
 {
-    workload "cassandra-cql" "$SCYLLA_HOST" "$A_UNI_REC_COUNT" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "workloads/workloada" "wA-zipifian-scylla" $A_UNI_COMMON_SCYLLA_PARAMS -p hotspotdatafraction=0.2 -p hotspotopnfraction=0.8 -p requestdistribution=zipfian
+    workload "run" "cassandra-cql" "$SCYLLA_HOST" "$A_UNI_REC_COUNT" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" "workloads/workloada" "wA-zipifian-scylla" $A_UNI_COMMON_SCYLLA_PARAMS -p hotspotdatafraction=0.2 -p hotspotopnfraction=0.8 -p requestdistribution=zipfian
 }
 
 workloadA_single_partition_scylla()
 {
-    workload "cassandra-cql" "$SCYLLA_HOST" 100000 "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" 1 "workloads/workloada" "wA-uni-single-part-scylla" $A_UNI_COMMON_SCYLLA_PARAMS
+    workload "run" "cassandra-cql" "$SCYLLA_HOST" 100000 "$(( A_UNI_REC_COUNT / NUM_INSTANCES ))" 1 "workloads/workloada" "wA-uni-single-part-scylla" $A_UNI_COMMON_SCYLLA_PARAMS
 }
 
 
