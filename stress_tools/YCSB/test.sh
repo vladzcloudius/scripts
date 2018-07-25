@@ -146,6 +146,9 @@ case "$test_mode" in
 "z_s")
 	workloadA_zipifian_scylla
 	;;
+"z_d")
+	workloadA_zipifian_dynamo
+	;;
 "sp_s")
 	workloadA_single_partition_scylla
 	;;
