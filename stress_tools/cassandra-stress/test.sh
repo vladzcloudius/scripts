@@ -27,9 +27,7 @@ NUM_KEYS=9000000
 NUM_THREADS=200
 CONN_PER_HOST=8
 OUT_BASE=$PWD
-NUM_CORES=152
-CORE_START=8
-CORES_PER_INST=$((NUM_CORES / STRESS_NUM))
+CPU_MASK_CMD="hwloc-calc all ~core:0"
 LOADERS=( 10.13.104.9 10.13.104.8 )
 #LOADERS=( 10.13.104.9 )
 ITERATIONS=1
@@ -45,7 +43,7 @@ SSH_LOADER_CMD="ssh user1"
 SCYLLA_START_CMD=`$SSH_CMD@$SCYLLA_HOST cat /home/$USER/scylla-ccm/start_cmd.txt`
 INTER_INSTANCE_DELAY=0.1
 #INTER_INSTANCE_DELAY=10
-CS_CMD="/home/user1/scylla-tools-java/tools/bin/cassandra-stress"
+CS_CMD="cassandra-stress"
 #CS_CMD="/home/user1/cassandra/tools/bin/cassandra-stress"
 
 
@@ -163,11 +161,13 @@ test_write()
             local j=0
 
             for ((ld = 0; ld < ${#LOADERS[@]}; ld++))
-	    do
+            do
+                local cpu_mask="`$SSH_LOADER_CMD@${LOADERS[$ld]} $CPU_MASK_CMD`"
+                local masks=( `$SSH_LOADER_CMD@${LOADERS[$ld]} "hwloc-distrib $STRESS_NUM --restrict $cpu_mask --taskset"` )
                 for ((i = 0; i < STRESS_NUM; i++))
                 do
-                    echo "${LOADERS[$ld]}: taskset -c $((CORE_START + i * CORES_PER_INST))-$((CORE_START + (i+1) * CORES_PER_INST - 1)) $(stress_write_cmd $ld $i $NUM_THREADS $NUM_KEYS)" > $OUT_BASE/write-out-$itn-$j.txt
-                    $SSH_LOADER_CMD@${LOADERS[$ld]} "taskset -c $((CORE_START + i * CORES_PER_INST))-$((CORE_START + (i+1) * CORES_PER_INST - 1)) $(stress_write_cmd $ld $i $NUM_THREADS  $NUM_KEYS)" >> $OUT_BASE/write-out-$itn-$j.txt 2>&1 &
+                    echo "${LOADERS[$ld]}: taskset ${masks[$i]} $(stress_write_cmd $ld $i $NUM_THREADS $NUM_KEYS)" > $OUT_BASE/write-out-$itn-$j.txt
+                    $SSH_LOADER_CMD@${LOADERS[$ld]} "taskset ${masks[$i]} $(stress_write_cmd $ld $i $NUM_THREADS  $NUM_KEYS)" >> $OUT_BASE/write-out-$itn-$j.txt 2>&1 &
                     echo "starting write test instance $j..."
                     sleep $INTER_INSTANCE_DELAY
                     j=$((j+1))
