@@ -12,7 +12,7 @@ test_mode=$3
 #SCYLLA_HOST=147.75.107.46
 #test_mode=$2
 
-STRESS_NUM=14
+STRESS_NUM=4
 #NUM_KEYS=27000000
 NUM_KEYS=9000000
 #NUM_KEYS=12000000
@@ -28,7 +28,7 @@ NUM_THREADS=200
 CONN_PER_HOST=8
 OUT_BASE=$PWD
 CPU_MASK_CMD="hwloc-calc all ~core:0"
-LOADERS=( 10.13.104.9 10.13.104.8 )
+LOADERS=( 54.236.251.128 )
 #LOADERS=( 10.13.104.9 )
 ITERATIONS=1
 POP_WIDTH=$NUM_KEYS
@@ -39,8 +39,8 @@ POP_WIDTH=$NUM_KEYS
 RATE_LIMIT=""
 #POP_WIDTH=$NUM_KEYS
 SSH_CMD="ssh $USER"
-SSH_LOADER_CMD="ssh user1"
-SCYLLA_START_CMD=`$SSH_CMD@$SCYLLA_HOST cat /home/$USER/scylla-ccm/start_cmd.txt`
+SSH_LOADER_CMD="ssh -i ~/work/AWS/vladz-key-pair-1.pem ubuntu"
+#SCYLLA_START_CMD=`$SSH_CMD@$SCYLLA_HOST cat /home/$USER/scylla-ccm/start_cmd.txt`
 INTER_INSTANCE_DELAY=0.1
 #INTER_INSTANCE_DELAY=10
 CS_CMD="cassandra-stress"
@@ -139,122 +139,129 @@ restart_scylla()
 
 test_write()
 {
-	local iterations=$1
-	echo "Write test. $iterations iterations..."
-	local i
-	local itn
-	local loader
-	local ld
-#	local total_stress_inst=$((STRESS_NUM*${#LOADERS[@]}))
-	for ((itn=0; itn < iterations; itn++))
-	do
-	    echo -e "Iteration $itn..."
-	    clear_and_restart
+    local iterations=$1
+    echo "Write test. $iterations iterations..."
+    local i
+    local itn
+    local loader
+    local ld
+    #local total_stress_inst=$((STRESS_NUM*${#LOADERS[@]}))
+    for ((itn=0; itn < iterations; itn++))
+    do
+        echo -e "Iteration $itn..."
+        clear_and_restart
 
-            # Create the KS with a short single thread WRITE
-            for ((ld = 0; ld < ${#LOADERS[@]}; ld++))
+        # Create the KS with a short single thread WRITE
+        for ((ld = 0; ld < ${#LOADERS[@]}; ld++))
+        do
+            echo "${LOADERS[$ld]}: $(stress_write_cmd $ld 0 1 1000)"
+            $SSH_LOADER_CMD@${LOADERS[$ld]} "$(stress_write_cmd $ld 0 1 1000)"
+        done
+
+        local j=0
+
+        for ((ld = 0; ld < ${#LOADERS[@]}; ld++))
+        do
+            local cpu_mask="`$SSH_LOADER_CMD@${LOADERS[$ld]} $CPU_MASK_CMD`"
+            local masks=( `$SSH_LOADER_CMD@${LOADERS[$ld]} "hwloc-distrib $STRESS_NUM --restrict $cpu_mask --taskset"` )
+            for ((i = 0; i < STRESS_NUM; i++))
             do
-                echo "${LOADERS[$ld]}: $(stress_write_cmd $ld 0 1 1000)"
-                $SSH_LOADER_CMD@${LOADERS[$ld]} "$(stress_write_cmd $ld 0 1 1000)"
+                echo "${LOADERS[$ld]}: taskset ${masks[$i]} $(stress_write_cmd $ld $i $NUM_THREADS $NUM_KEYS)" > $OUT_BASE/write-out-$itn-$j.txt
+                $SSH_LOADER_CMD@${LOADERS[$ld]} "taskset ${masks[$i]} $(stress_write_cmd $ld $i $NUM_THREADS  $NUM_KEYS)" >> $OUT_BASE/write-out-$itn-$j.txt 2>&1 &
+                echo "starting write test instance $j..."
+                sleep $INTER_INSTANCE_DELAY
+                j=$((j+1))
             done
-
-            local j=0
-
-            for ((ld = 0; ld < ${#LOADERS[@]}; ld++))
-            do
-                local cpu_mask="`$SSH_LOADER_CMD@${LOADERS[$ld]} $CPU_MASK_CMD`"
-                local masks=( `$SSH_LOADER_CMD@${LOADERS[$ld]} "hwloc-distrib $STRESS_NUM --restrict $cpu_mask --taskset"` )
-                for ((i = 0; i < STRESS_NUM; i++))
-                do
-                    echo "${LOADERS[$ld]}: taskset ${masks[$i]} $(stress_write_cmd $ld $i $NUM_THREADS $NUM_KEYS)" > $OUT_BASE/write-out-$itn-$j.txt
-                    $SSH_LOADER_CMD@${LOADERS[$ld]} "taskset ${masks[$i]} $(stress_write_cmd $ld $i $NUM_THREADS  $NUM_KEYS)" >> $OUT_BASE/write-out-$itn-$j.txt 2>&1 &
-                    echo "starting write test instance $j..."
-                    sleep $INTER_INSTANCE_DELAY
-                    j=$((j+1))
-                done
-            done
-            wait
-            get_server_latencies write $itn
-	done
+        done
+        wait
+        get_server_latencies write $itn
+    done
 }
 
 test_read()
 {
-	echo "Read test. $ITERATIONS iterations..."
-	local rd_from_disk="$1"
-	local i
-	local j
-	local itn
-	local ld 
-	for ((itn=0; itn < ITERATIONS; itn++))
+    echo "Read test. $ITERATIONS iterations..."
+    local rd_from_disk="$1"
+    local i
+    local j
+    local itn
+    local ld
+    for ((itn=0; itn < ITERATIONS; itn++))
+    do
+        j=0
+        echo -e "Iteration $itn..."
+        [[ -n "$rd_from_disk" ]] && restart_scylla
+        for ((ld = 0; ld < ${#LOADERS[@]}; ld++))
         do
-		j=0
-		echo -e "Iteration $itn..."
-		[[ -n "$rd_from_disk" ]] && restart_scylla
-		for ((ld = 0; ld < ${#LOADERS[@]}; ld++))
-		do
-        	    for ((i = 0; i < STRESS_NUM; i++))
-	            do
-	                echo "${LOADERS[$ld]}: taskset -c $((CORE_START + i * CORES_PER_INST))-$((CORE_START + (i+1) * CORES_PER_INST - 1)) $(stress_read_cmd $ld $i)" > $OUT_BASE/read-out-$itn-$j.txt
-        	        $SSH_LOADER_CMD@${LOADERS[$ld]} "taskset -c $((CORE_START + i * CORES_PER_INST))-$((CORE_START + (i+1) * CORES_PER_INST - 1)) $(stress_read_cmd $ld $i)" >> $OUT_BASE/read-out-$itn-$j.txt 2>&1 &
-			echo "starting read test instance $j..."
-			sleep $INTER_INSTANCE_DELAY
-			j=$((j+1))
-	            done
-		done
-        	wait
-		get_server_latencies read $itn
-	done
+            local cpu_mask="`$SSH_LOADER_CMD@${LOADERS[$ld]} $CPU_MASK_CMD`"
+            local masks=( `$SSH_LOADER_CMD@${LOADERS[$ld]} "hwloc-distrib $STRESS_NUM --restrict $cpu_mask --taskset"` )
+            for ((i = 0; i < STRESS_NUM; i++))
+            do
+                echo "${LOADERS[$ld]}: taskset ${masks[$i]} $(stress_read_cmd $ld $i)" > $OUT_BASE/read-out-$itn-$j.txt
+                $SSH_LOADER_CMD@${LOADERS[$ld]} "taskset ${masks[$i]} $(stress_read_cmd $ld $i)" >> $OUT_BASE/read-out-$itn-$j.txt 2>&1 &
+                echo "starting read test instance $j..."
+                sleep $INTER_INSTANCE_DELAY
+                j=$((j+1))
+            done
+        done
+        wait
+        get_server_latencies read $itn
+done
 }
 
 test_mixed()
-{ 
-        echo "Mixed (2 writes 8 read) test. $ITERATIONS iterations..."
-        local arg="$1"
-        local rd_from_disk=""
-        local no_write=""
-        local rate_limit="$RATE_LIMIT"
-   
-	case "$arg" in
-	"rd")
-        	rd_from_disk="1"
-	        ;;
-	"rd-no-wr")
-        	rd_from_disk="1"
-		no_write="1"
-		;;
-	"no-wr")
-		no_write="1"
-		;;
-	esac
+    {
+    echo "Mixed (2 writes 8 read) test. $ITERATIONS iterations..."
+    local arg="$1"
+    local rd_from_disk=""
+    local no_write=""
+    local rate_limit="$RATE_LIMIT"
 
-        local i
-	local j
-        local itn
-	local ld
-        for ((itn=0; itn < ITERATIONS; itn++))
+    case "$arg" in
+    "rd")
+        rd_from_disk="1"
+        ;;
+    "rd-no-wr")
+        rd_from_disk="1"
+        no_write="1"
+        ;;
+    "no-wr")
+        no_write="1"
+        ;;
+    esac
+
+    local i
+    local j
+    local itn
+    local ld
+    for ((itn=0; itn < ITERATIONS; itn++))
+    do
+        j=0
+        echo -e "Iteration $itn..."
+
+        RATE_LIMIT=""
+        [[ -z "$no_write" ]] && test_write 1
+
+        RATE_LIMIT="$rate_limit"
+        [[ -n "$rd_from_disk" ]] && restart_scylla
+
+        for ((ld = 0; ld < ${#LOADERS[@]}; ld++))
         do
-		j=0 
-                echo -e "Iteration $itn..."
-                RATE_LIMIT=""
-		[[ -z "$no_write" ]] && test_write 1
-                RATE_LIMIT="$rate_limit"
-                [[ -n "$rd_from_disk" ]] && restart_scylla
-		for ((ld = 0; ld < ${#LOADERS[@]}; ld++))
-                do
-                    for ((i = 0; i < STRESS_NUM; i++))
-                    do
-                        echo "${LOADERS[$ld]}: taskset -c $((CORE_START + i * CORES_PER_INST))-$((CORE_START + (i+1) * CORES_PER_INST - 1)) $(stress_mixed_cmd $ld $i)" > $OUT_BASE/mixed-out-$itn-$j.txt
-                        $SSH_LOADER_CMD@${LOADERS[$ld]} "taskset -c $((CORE_START + i * CORES_PER_INST))-$((CORE_START + (i+1) * CORES_PER_INST - 1)) $(stress_mixed_cmd $ld $i)" >> $OUT_BASE/mixed-out-$itn-$j.txt 2>&1 &
-                        echo "starting mixed test instance $j..."
-			sleep $INTER_INSTANCE_DELAY
-                        j=$((j+1))
-                    done
-		done
-                wait
-		get_server_latencies mixed $itn
+            local cpu_mask="`$SSH_LOADER_CMD@${LOADERS[$ld]} $CPU_MASK_CMD`"
+            local masks=( `$SSH_LOADER_CMD@${LOADERS[$ld]} "hwloc-distrib $STRESS_NUM --restrict $cpu_mask --taskset"` )
+            for ((i = 0; i < STRESS_NUM; i++))
+            do
+                echo "${LOADERS[$ld]}: taskset ${masks[$i]} $(stress_mixed_cmd $ld $i)" > $OUT_BASE/mixed-out-$itn-$j.txt
+                $SSH_LOADER_CMD@${LOADERS[$ld]} "taskset ${masks[$i]} $(stress_mixed_cmd $ld $i)" >> $OUT_BASE/mixed-out-$itn-$j.txt 2>&1 &
+                echo "starting mixed test instance $j..."
+                sleep $INTER_INSTANCE_DELAY
+                j=$((j+1))
+            done
         done
-} 
+        wait
+        get_server_latencies mixed $itn
+    done
+    }
 
 
 test_read_from_disk()
