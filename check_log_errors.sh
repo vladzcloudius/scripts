@@ -15,7 +15,7 @@ fi
 
 for f in $@
 do
-	grep -H shard "$f" | egrep -i "error|Writing large|no progress|stall|bad_alloc"
+	grep -H shard "$f" | egrep -i "error|Writing large|no progress|stall|bad_alloc|failed"
 	grep -H shard "$f" | grep "Streaming plan" | grep failed | grep "repair\-in"
 done
 
