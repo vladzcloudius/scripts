@@ -46,12 +46,12 @@ for node in node2tokens.keys():
 nodes_ranges[token2node[sorted_tokens[0]]].append([min_token, sorted_tokens[0]])
 nodes_ranges[token2node[sorted_tokens[0]]].append([sorted_tokens[-1], max_token])
 
-# Right boundary owner owns the range
+# Right boundary token owner owns the range
 for i, token in reversed(list(enumerate(sorted_tokens))):
     if i > 0:
         nodes_ranges[token2node[token]].append([sorted_tokens[i-1], token])
 
-# Left boundary owner own the range
+# Left boundary token owner owns the range
 # for i, token in list(enumerate(sorted_tokens)):
 #     if i < len(sorted_tokens) - 1:
 #         nodes_ranges[token2node[token]].append([token, sorted_tokens[i+1]])
@@ -65,11 +65,15 @@ for node, ranges in nodes_ranges.items():
     node2num_tokens.append([node, s])
 
 total = sum([s for n, s in node2num_tokens])
+average = int(total / len(node2num_tokens))
 
-sorted_node2num_tokens = sorted(node2num_tokens, key=lambda p: p[1] / total)
+# Sort by the amount of owned tokens
+sorted_node2num_tokens = sorted(node2num_tokens, key=lambda p: p[1])
 
 for node, num_tokens in reversed(sorted_node2num_tokens):
     print("{}: {}({}%)".format(node, num_tokens, num_tokens / total))
+
+print("average: {}({}%)".format(average, average / total))
 
 
 
