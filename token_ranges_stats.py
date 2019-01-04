@@ -46,7 +46,7 @@ def read_tokens_from_cluster(session):
 
 
 ########################################################################################################################
-argp = argparse.ArgumentParser(description='Calculate total amount of tokens owned by each node')
+argp = argparse.ArgumentParser(description='Calculate various statistics about a given token ring')
 argp.add_argument('--tokens-file', help='output of concatenation of SELECT peers,tokens FROM system.peers and SELECT '
                                         'broadcast_address,tokens FROM system.local (for debug purposes)')
 argp.add_argument('--user', '-u')
@@ -100,11 +100,6 @@ nodes_ranges[token2node[sorted_tokens[0]]].append([sorted_tokens[-1], max_token]
 for i, token in reversed(list(enumerate(sorted_tokens))):
     if i > 0:
         nodes_ranges[token2node[token]].append([sorted_tokens[i-1], token])
-
-# Left boundary token owner owns the range
-# for i, token in list(enumerate(sorted_tokens)):
-#     if i < len(sorted_tokens) - 1:
-#         nodes_ranges[token2node[token]].append([token, sorted_tokens[i+1]])
 
 node2num_tokens = []
 
