@@ -5,7 +5,7 @@ import sys
 
 from cassandra.cluster import Cluster
 from cassandra.auth import PlainTextAuthProvider
-
+from cassandra.policies import RoundRobinPolicy
 
 ########################################################################################################################
 def read_tokens_file(fname):
@@ -23,6 +23,24 @@ def read_tokens_file(fname):
                 token_int_arr = [int(t.strip().strip("'")) for t in tokens_str_arr]
                 # print(token_int_arr)
                 node2tokens[line_parts[0].strip()] = token_int_arr
+
+    return node2tokens
+
+
+def read_tokens_from_cluster(session):
+    node2tokens = {}
+
+    peers_tokens = session.execute("select peer, tokens from system.peers")
+    for peer, tokens in peers_tokens:
+        node2tokens[peer] = [int(t) for t in tokens]
+
+    # Load balancing is DcAwareRoundRobin - we shell eventually connect to the node from where we collected system.peers
+    # data.
+    while True:
+        local_addr, tokens = list(session.execute("select broadcast_address, tokens from system.local"))[0]
+        if local_addr not in node2tokens:
+            node2tokens[local_addr] = [int(t) for t in tokens]
+            break
 
     return node2tokens
 
@@ -50,12 +68,7 @@ else:
 
     try:
         session = cluster.connect()
-        cluster_meta = session.cluster.metadata
-        node2tokens = {}
-        for token, host in cluster_meta.token_map.token_to_host_owner.items():
-            if host.address not in node2tokens:
-                node2tokens[host.address] = []
-            node2tokens[host.address].append(token.value)
+        node2tokens = read_tokens_from_cluster(session)
     except Exception:
         print("ERROR: {}".format(sys.exc_info()))
         sys.exit(1)
