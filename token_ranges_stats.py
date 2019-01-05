@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import statistics
 import sys
 
 from cassandra.cluster import Cluster
@@ -101,25 +102,30 @@ for i, token in reversed(list(enumerate(sorted_tokens))):
     if i > 0:
         nodes_ranges[token2node[token]].append([sorted_tokens[i-1], token])
 
-node2num_tokens = []
+node2num_tokens = {}
 
 for node, ranges in nodes_ranges.items():
-    s = 0
-    for l, r in ranges:
-        s = s + r - l - 1
-    node2num_tokens.append([node, s])
+    node2num_tokens[node] = sum([r - l - 1 for l, r in ranges])
 
-total = sum([s for n, s in node2num_tokens])
+total = sum(node2num_tokens.values())
 average = int(total / len(node2num_tokens))
 
+all_ranges_sizes = [r - l - 1 for l, r in ranges for node, ranges in nodes_ranges.items()]
+all_ranges_sizes_average = statistics.mean(all_ranges_sizes)
+all_ranges_sizes_stdev = statistics.pstdev(all_ranges_sizes, mu=all_ranges_sizes_average)
+
 # Sort by the amount of owned tokens
-sorted_node2num_tokens = sorted(node2num_tokens, key=lambda p: p[1])
+sorted_node2num_tokens = sorted(node2num_tokens.items(), key=lambda p: p[1])
 
 for node, num_tokens in reversed(sorted_node2num_tokens):
-    print("{}: ranges: {} tokens: {}({}%)".format(node, len(node2tokens[node]), num_tokens, num_tokens / total))
+    node_ranges = [r - l - 1 for l, r in nodes_ranges[node]]
+    node_average = node2num_tokens[node] / len(node_ranges)
+    node_cv = statistics.pstdev(node_ranges, mu=node_average) / node_average
 
-print("average: {}({}%)".format(average, average / total))
+    print("{}: ranges: {} tokens: {}({}%) CV: {}%".format(node, len(node2tokens[node]), num_tokens, round(100 * num_tokens / total, 2), round(100 * node_cv, 2)))
 
+print("average: {}({}%)".format(average, round(100 * average / total, 2)))
+print("CV: {}%".format(round(100 * all_ranges_sizes_stdev / all_ranges_sizes_average, 2)))
 
 
 
