@@ -65,7 +65,7 @@ else:
         auth_provider = PlainTextAuthProvider(username=args.user, password=args.password)
         cluster = Cluster(auth_provider=auth_provider, contact_points=[args.node], port=args.port)
     else:
-        cluster = Cluster(contact_points=[args.node], port=args.port)
+        cluster = Cluster(contact_points=[args.node], port=int(args.port))
 
     try:
         session = cluster.connect()
