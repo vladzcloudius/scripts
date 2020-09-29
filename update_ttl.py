@@ -79,7 +79,8 @@ def update_ttl(args):
         if not non_key_columns:
             sys.exit("Can't find non key column. We will not be able to update TTLs.")
 
-        qstring = "SELECT WRITETIME(\"{}\"),TTL(\"{}\"),{} FROM {}.{}".format(non_key_columns[0], non_key_columns[0], ",".join([ "\"{}\"".format(cl) for cl in pr_key_names + non_key_columns ]), args.keyspace, args.table)
+        non_key_col_idx = 1
+        qstring = "SELECT WRITETIME(\"{}\"),TTL(\"{}\"),{} FROM {}.{}".format(non_key_columns[non_key_col_idx], non_key_columns[non_key_col_idx], ",".join([ "\"{}\"".format(cl) for cl in pr_key_names + non_key_columns ]), args.keyspace, args.table)
         del_qstring = "DELETE FROM {}.{} WHERE {}".format(args.keyspace, args.table, " AND ".join([ "\"{}\" = ?".format(pcl) for pcl in pr_key_names ]))
         update_qstring = "INSERT INTO {}.{} ({}) VALUES ({}) USING TTL ?".format(args.keyspace, args.table, ",".join([ "\"{}\"".format(cl) for cl in pr_key_names + non_key_columns ]), ",".join([ "?" for cl in pr_key_names + non_key_columns]))
 
