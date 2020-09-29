@@ -86,13 +86,10 @@ def update_ttl(args):
         del_qstring = "DELETE FROM {}.{} WHERE {}".format(args.keyspace, args.table, " AND ".join([ "\"{}\" = ?".format(pcl) for pcl in pr_key_names ]))
         update_qstring = "INSERT INTO {}.{} ({}) VALUES ({}) USING TTL ?".format(args.keyspace, args.table, ",".join([ "\"{}\"".format(cl) for cl in pr_key_names + non_key_columns ]), ",".join([ "?" for cl in pr_key_names + non_key_columns]))
 
-        print("preparing del_statement")
-
         del_prepared = session.prepare(del_qstring)
         # FIXME: use user provided values
         del_prepared.consistency_level = cassandra.ConsistencyLevel.ALL
 
-        print("preparing update_statement")
         update_prepared = session.prepare(update_qstring)
         # FIXME: use user provided values
         update_prepared.consistency_level = cassandra.ConsistencyLevel.LOCAL_QUORUM
@@ -100,8 +97,6 @@ def update_ttl(args):
         print("qstring: {}\ndel_string: {}\nupdate_str: {}".format(qstring, del_qstring, update_qstring))
 
         pr_key_names_len = len(pr_key_names)
-
-        print("going to execute QUERY")
         for row in session.execute(qstring):
             process_one_page(args, session, row, del_prepared, update_prepared, pr_key_names_len)
 
