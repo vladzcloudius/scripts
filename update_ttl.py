@@ -36,12 +36,15 @@ def process_one_page(args, session, row, del_prepared, update_prepared, pr_key_n
     row_age_seconds = int(now - write_time_seconds)
     #print("{}: written {} seconds ago".format(row[0], now - write_time_seconds))
 
+    print("# In process_one_page")
+
+
     if (row_age_seconds >= args.ttl):
         last_key_idx = 2 + pr_key_names_len
-        #print("going to delete this key: {}".format(key_vals))
+        print("## going to delete this key: {}".format(key_vals))
         session.execute(del_prepared, row[2:last_key_idx])
     elif row[1] is None:
-        # print("Updating")
+        print("## Updating")
         new_ttl = args.ttl - row_age_seconds
         session.execute(update_prepared, list(itertools.chain(row[2:], [ new_ttl ])))
         
