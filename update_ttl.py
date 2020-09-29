@@ -30,20 +30,32 @@ from cassandra.auth import PlainTextAuthProvider
 
 ################################################################################
 # FIXME: make this all a class and make all these parameters class members
-def process_one_page(args, session, row, del_prepared, update_prepared, pr_key_names_len):
+def process_one_row(args, session, row, del_prepared, update_prepared, pr_key_names_len, non_key_columns_len):
     now = time.time()
-    write_time_seconds = int(row[0]) / 1000000
-    row_age_seconds = int(now - write_time_seconds)
-    #print("{}: written {} seconds ago".format(row[0], now - write_time_seconds))
 
+    non_val_items_num = 2 * non_key_columns_len
+    
+    # get the maximum write timestamp and use it for TTL calculations
+    write_time_seconds = max([int(r) if r is not None else 0 for r in row[0:non_val_items_num]])  / 1000000
+
+    last_key_idx = non_val_items_num + pr_key_names_len
+    first_key_idx = non_val_items_num
+
+    if write_time_seconds == 0:
+        print("{}: All non-key values are null - skipping".format(row[first_key_idx:last_key_idx]))
+        return
+
+    row_age_seconds = int(now - write_time_seconds)
+    have_null_ttl = len(list(filter(lambda t: t is None, row[non_key_columns_len:non_val_items_num]))) > 0
+
+    #print("{}: written {} seconds ago".format(write_time_seconds, now - write_time_seconds))
     if (row_age_seconds >= args.ttl):
-        last_key_idx = 2 + pr_key_names_len
-        #print("going to delete this key: {}".format(key_vals))
-        session.execute(del_prepared, row[2:last_key_idx])
-    elif row[1] is None:
+        # print("going to delete this key: {}".format(row[first_key_idx:last_key_idx]))
+        session.execute(del_prepared, row[first_key_idx:last_key_idx])
+    elif have_null_ttl:
         # print("Updating")
         new_ttl = args.ttl - row_age_seconds
-        session.execute(update_prepared, list(itertools.chain(row[2:], [ new_ttl ])))
+        session.execute(update_prepared, list(itertools.chain(row[non_val_items_num:], [ new_ttl ])))
         
 def update_ttl(args):
     res = True
@@ -79,7 +91,10 @@ def update_ttl(args):
         if not non_key_columns:
             sys.exit("Can't find non key column. We will not be able to update TTLs.")
 
-        qstring = "SELECT WRITETIME(\"{}\"),TTL(\"{}\"),{} FROM {}.{}".format(non_key_columns[0], non_key_columns[0], ",".join([ "\"{}\"".format(cl) for cl in pr_key_names + non_key_columns ]), args.keyspace, args.table)
+        writetime_non_key = ",".join([ "WRITETIME(\"{}\")".format(key) for key in non_key_columns ])
+        ttl_non_key = ",".join([ "TTL(\"{}\")".format(key) for key in non_key_columns ])
+        all_columns = ",".join([ "\"{}\"".format(cl) for cl in pr_key_names + non_key_columns ])
+        qstring = "SELECT {},{},{} FROM {}.{}".format(writetime_non_key, ttl_non_key, all_columns, args.keyspace, args.table)
         del_qstring = "DELETE FROM {}.{} WHERE {}".format(args.keyspace, args.table, " AND ".join([ "\"{}\" = ?".format(pcl) for pcl in pr_key_names ]))
         update_qstring = "INSERT INTO {}.{} ({}) VALUES ({}) USING TTL ?".format(args.keyspace, args.table, ",".join([ "\"{}\"".format(cl) for cl in pr_key_names + non_key_columns ]), ",".join([ "?" for cl in pr_key_names + non_key_columns]))
 
@@ -94,8 +109,9 @@ def update_ttl(args):
         print("qstring: {}\ndel_string: {}\nupdate_str: {}".format(qstring, del_qstring, update_qstring))
 
         pr_key_names_len = len(pr_key_names)
+        non_key_names_len = len(non_key_columns)
         for row in session.execute(qstring):
-            process_one_page(args, session, row, del_prepared, update_prepared, pr_key_names_len)
+            process_one_row(args, session, row, del_prepared, update_prepared, pr_key_names_len, non_key_names_len)
 
     except Exception:
         print("ERROR: {}".format(sys.exc_info()))
