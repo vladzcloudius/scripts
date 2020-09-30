@@ -129,6 +129,10 @@ def update_ttl(args):
         for row in session.execute(qstring):
             process_one_row(args, session, row, del_prepared, update_prepared, pr_key_names_len, non_key_names_len)
 
+        # Wait till all async callbacks are complete
+        for i in range(max_concurrency):
+            concurrency_sema.acquire()
+
     except Exception:
         print("ERROR: {}".format(sys.exc_info()))
         sys.exit(1)
