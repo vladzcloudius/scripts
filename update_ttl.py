@@ -72,6 +72,9 @@ def process_one_row(args, session, row, del_prepared, update_prepared, pr_key_na
 
     if future:
         future.add_callbacks(callback=handle_comp, errback=handle_error)
+        return 1
+    else:
+        return 0
         
 def update_ttl(args):
     res = True
@@ -126,12 +129,17 @@ def update_ttl(args):
 
         pr_key_names_len = len(pr_key_names)
         non_key_names_len = len(non_key_columns)
+        updated_rows = 0
+        total_rows = 0
         for row in session.execute(qstring):
-            process_one_row(args, session, row, del_prepared, update_prepared, pr_key_names_len, non_key_names_len)
+            total_rows = total_rows + 1
+            updated_rows = updated_rows + process_one_row(args, session, row, del_prepared, update_prepared, pr_key_names_len, non_key_names_len)
 
         # Wait till all async callbacks are complete
         for i in range(max_concurrency):
             concurrency_sema.acquire()
+
+        print("Done: updated {} rows out of {}".format(updated_rows, total_rows))
 
     except Exception:
         print("ERROR: {}".format(sys.exc_info()))
