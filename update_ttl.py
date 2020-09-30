@@ -20,6 +20,7 @@
 # along with Scylla.  If not, see <http://www.gnu.org/licenses/>.
 #
 import argparse
+from threading import BoundedSemaphore
 import cassandra
 import itertools
 import sys
@@ -30,6 +31,15 @@ from cassandra.auth import PlainTextAuthProvider
 
 ################################################################################
 # FIXME: make this all a class and make all these parameters class members
+max_concurrency = None
+concurrency_sema = None
+
+def handle_comp(res):
+    concurrency_sema.release()
+
+def handle_error(exc):
+    sys.exit("failed: {}".format(exc))
+
 def process_one_row(args, session, row, del_prepared, update_prepared, pr_key_names_len, non_key_columns_len):
     now = time.time()
 
@@ -49,13 +59,19 @@ def process_one_row(args, session, row, del_prepared, update_prepared, pr_key_na
     have_null_ttl = len(list(filter(lambda t: t is None, row[non_key_columns_len:non_val_items_num]))) > 0
 
     #print("{}: written {} seconds ago".format(write_time_seconds, now - write_time_seconds))
+    future = None
     if (row_age_seconds >= args.ttl):
         # print("going to delete this key: {}".format(row[first_key_idx:last_key_idx]))
-        session.execute(del_prepared, row[first_key_idx:last_key_idx])
+        concurrency_sema.acquire()
+        future = session.execute_async(del_prepared, row[first_key_idx:last_key_idx])
     elif have_null_ttl:
         # print("Updating")
         new_ttl = args.ttl - row_age_seconds
-        session.execute(update_prepared, list(itertools.chain(row[non_val_items_num:], [ new_ttl ])))
+        concurrency_sema.acquire()
+        future = session.execute_async(update_prepared, list(itertools.chain(row[non_val_items_num:], [ new_ttl ])))
+
+    if future:
+        future.add_callbacks(callback=handle_comp, errback=handle_error)
         
 def update_ttl(args):
     res = True
@@ -126,14 +142,18 @@ argp.add_argument('--port', default=9042, help='Port to connect to.', type=int)
 argp.add_argument('--keyspace', help='Keyspace name')
 argp.add_argument('--table', help='Table name')
 argp.add_argument('--ttl', help='TTL to set', type=int)
+argp.add_argument('--max-concurrency', help='Maximum UPDATE/DELETE queries concurrency', type=int, default=100)
 #argp.add_argument('--delete_cl', default="ALL", help="Consistency level of the DELETE operation")
 #argp.add_argument('--update_cl', help='Consistency level of the INSERT operation')
 
 args = argp.parse_args()
-if (not (args.keyspace and args.table and args.ttl)):
+if (args.keyspace is None or args.table is None or args.ttl is None):
     sys.exit("Keyspace and table names, and TTL are obligatory parameters")
 
 # TODO: implement an enum class that translates from delete_cl value into the cassandra.ConsistencyLevel value
+
+max_concurrency = args.max_concurrency
+concurrency_sema = BoundedSemaphore(value=max_concurrency)
 
 res = update_ttl(args)
 if res:
