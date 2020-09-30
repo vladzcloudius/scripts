@@ -24,6 +24,7 @@ from threading import BoundedSemaphore
 import cassandra
 import itertools
 import sys
+import re
 import time
 
 from cassandra.cluster import Cluster
@@ -40,13 +41,13 @@ def handle_comp(res):
 def handle_error(exc):
     sys.exit("failed: {}".format(exc))
 
-def process_one_row(args, session, row, del_prepared, update_prepared, pr_key_names_len, non_key_columns_len):
+def process_one_row(args, session, row, del_prepared, update_prepared, pr_key_names_len, non_key_non_composite_columns_len):
     now = time.time()
 
-    non_val_items_num = 2 * non_key_columns_len
+    non_val_items_num = 2 * non_key_non_composite_columns_len
     
     # get the maximum write timestamp and use it for TTL calculations
-    write_time_seconds = max([int(r) if r is not None else 0 for r in row[0:non_val_items_num]])  / 1000000
+    write_time_seconds = max([int(r) if r is not None else 0 for r in row[0:non_key_non_composite_columns_len]])  / 1000000
 
     last_key_idx = non_val_items_num + pr_key_names_len
     first_key_idx = non_val_items_num
@@ -56,7 +57,7 @@ def process_one_row(args, session, row, del_prepared, update_prepared, pr_key_na
         return
 
     row_age_seconds = int(now - write_time_seconds)
-    have_null_ttl = len(list(filter(lambda t: t is None, row[non_key_columns_len:non_val_items_num]))) > 0
+    have_null_ttl = len(list(filter(lambda t: t is None, row[non_key_non_composite_columns_len:non_val_items_num]))) > 0
 
     #print("{}: written {} seconds ago".format(write_time_seconds, now - write_time_seconds))
     future = None
@@ -106,12 +107,19 @@ def update_ttl(args):
         for cl in table_meta.columns:
             if cl not in pr_key_names:
                 non_key_columns.append(cl)
-        
+
+        composite_types = re.compile(r'map|set|list')
+        non_key_non_composite_columns = []
+
+        for cl in non_key_columns:
+            if not composite_types.search(table_meta.columns[cl].cql_type):
+                non_key_non_composite_columns.append(cl)
+
         if not non_key_columns:
             sys.exit("Can't find non key column. We will not be able to update TTLs.")
 
-        writetime_non_key = ",".join([ "WRITETIME(\"{}\")".format(key) for key in non_key_columns ])
-        ttl_non_key = ",".join([ "TTL(\"{}\")".format(key) for key in non_key_columns ])
+        writetime_non_key = ",".join([ "WRITETIME(\"{}\")".format(key) for key in non_key_non_composite_columns ])
+        ttl_non_key = ",".join([ "TTL(\"{}\")".format(key) for key in non_key_non_composite_columns ])
         all_columns = ",".join([ "\"{}\"".format(cl) for cl in pr_key_names + non_key_columns ])
         qstring = "SELECT {},{},{} FROM {}.{}".format(writetime_non_key, ttl_non_key, all_columns, args.keyspace, args.table)
         del_qstring = "DELETE FROM {}.{} WHERE {}".format(args.keyspace, args.table, " AND ".join([ "\"{}\" = ?".format(pcl) for pcl in pr_key_names ]))
@@ -128,12 +136,12 @@ def update_ttl(args):
         print("qstring: {}\ndel_string: {}\nupdate_str: {}".format(qstring, del_qstring, update_qstring))
 
         pr_key_names_len = len(pr_key_names)
-        non_key_names_len = len(non_key_columns)
+        non_key_non_composite_names_len = len(non_key_non_composite_columns)
         updated_rows = 0
         total_rows = 0
         for row in session.execute(qstring):
             total_rows = total_rows + 1
-            updated_rows = updated_rows + process_one_row(args, session, row, del_prepared, update_prepared, pr_key_names_len, non_key_names_len)
+            updated_rows = updated_rows + process_one_row(args, session, row, del_prepared, update_prepared, pr_key_names_len, non_key_non_composite_names_len)
 
         # Wait till all async callbacks are complete
         for i in range(max_concurrency):
