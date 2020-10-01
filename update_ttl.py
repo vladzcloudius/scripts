@@ -131,7 +131,7 @@ def update_ttl(args):
 
         update_prepared = session.prepare(update_qstring)
         # FIXME: use user provided values
-        update_prepared.consistency_level = cassandra.ConsistencyLevel.LOCAL_QUORUM
+        update_prepared.consistency_level = cassandra.ConsistencyLevel.ALL
 
         print("qstring: {}\ndel_string: {}\nupdate_str: {}".format(qstring, del_qstring, update_qstring))
 
