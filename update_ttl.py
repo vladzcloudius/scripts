@@ -79,6 +79,9 @@ def process_one_row(args, session, row, del_prepared, update_prepared, pr_key_na
         
 def update_ttl(args):
     res = True
+    updated_rows = 0
+    total_rows = 0
+
     if args.user:
         auth_provider = PlainTextAuthProvider(username=args.user, password=args.password)
         cluster = Cluster(auth_provider=auth_provider, contact_points=[args.node], port=args.port)
@@ -137,8 +140,7 @@ def update_ttl(args):
 
         pr_key_names_len = len(pr_key_names)
         non_key_non_composite_names_len = len(non_key_non_composite_columns)
-        updated_rows = 0
-        total_rows = 0
+        
         for row in session.execute(qstring):
             total_rows = total_rows + 1
             updated_rows = updated_rows + process_one_row(args, session, row, del_prepared, update_prepared, pr_key_names_len, non_key_non_composite_names_len)
@@ -151,6 +153,7 @@ def update_ttl(args):
 
     except Exception:
         print("ERROR: {}".format(sys.exc_info()))
+        print("Processed by now: total rows: {} updated rows: {}".format(total_rows, updated_rows))
         sys.exit(1)
 
 ################################################################################
